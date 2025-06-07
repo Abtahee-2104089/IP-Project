@@ -1,17 +1,22 @@
-import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Calendar, Users, Award, Clock } from 'lucide-react';
-import { Button } from '../components/ui/Button';
 import EventCard from '../components/EventCard';
 import ClubCard from '../components/ClubCard';
-import { events, getEventsByStatus } from '../data/events';
-import { clubs } from '../data/clubs';
+import { useEvents, useClubs } from '../hooks/useData';
 import { useAuth } from '../context/AuthContext';
+import { Event } from '../types';
 
 export default function HomePage() {
   const { user } = useAuth();
-  const upcomingEvents = getEventsByStatus('upcoming').slice(0, 4);
+  const { events, loading: eventsLoading } = useEvents();
+  const { clubs, loading: clubsLoading } = useClubs();
+    // Filter upcoming events (assuming events have a date field)
+  const upcomingEvents = events
+    .filter((event: Event) => new Date(event.date) > new Date())
+    .slice(0, 4);
+  
   const featuredClubs = clubs.slice(0, 4);
+  const loading = eventsLoading || clubsLoading;
 
   return (
     <div>
@@ -25,23 +30,19 @@ export default function HomePage() {
               </h1>
               <p className="text-lg md:text-xl opacity-90">
                 Discover events, join clubs, and connect with the vibrant CUET community all in one place.
-              </p>
-              <div className="flex flex-wrap gap-4">
-                <Button 
-                  size="lg" 
-                  className="bg-white text-blue-600 hover:bg-gray-100"
-                  asChild
+              </p>              <div className="flex flex-wrap gap-4">
+                <Link 
+                  to="/events"
+                  className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 h-12 px-6 text-base bg-white text-blue-600 hover:bg-gray-100"
                 >
-                  <Link to="/events">Browse Events</Link>
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="lg" 
-                  className="text-white border-white hover:bg-white/10"
-                  asChild
+                  Browse Events
+                </Link>
+                <Link 
+                  to="/clubs"
+                  className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 h-12 px-6 text-base border border-white bg-transparent hover:bg-white/10 text-white"
                 >
-                  <Link to="/clubs">Explore Clubs</Link>
-                </Button>
+                  Explore Clubs
+                </Link>
               </div>
             </div>
             <div className="hidden md:block">
@@ -53,9 +54,7 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-      </section>
-
-      {/* Stats section */}
+      </section>      {/* Stats section */}
       <section className="bg-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
@@ -63,14 +62,18 @@ export default function HomePage() {
               <div className="flex justify-center mb-4">
                 <Calendar className="h-10 w-10 text-blue-600" />
               </div>
-              <h3 className="text-3xl font-bold text-gray-800">{events.length}</h3>
+              <h3 className="text-3xl font-bold text-gray-800">
+                {loading ? '...' : events.length}
+              </h3>
               <p className="text-gray-600">Total Events</p>
             </div>
             <div className="p-6 bg-purple-50 rounded-lg">
               <div className="flex justify-center mb-4">
                 <Users className="h-10 w-10 text-purple-600" />
               </div>
-              <h3 className="text-3xl font-bold text-gray-800">{clubs.length}</h3>
+              <h3 className="text-3xl font-bold text-gray-800">
+                {loading ? '...' : clubs.length}
+              </h3>
               <p className="text-gray-600">Active Clubs</p>
             </div>
             <div className="p-6 bg-teal-50 rounded-lg">
@@ -84,7 +87,9 @@ export default function HomePage() {
               <div className="flex justify-center mb-4">
                 <Clock className="h-10 w-10 text-amber-600" />
               </div>
-              <h3 className="text-3xl font-bold text-gray-800">{upcomingEvents.length}</h3>
+              <h3 className="text-3xl font-bold text-gray-800">
+                {loading ? '...' : upcomingEvents.length}
+              </h3>
               <p className="text-gray-600">Upcoming Events</p>
             </div>
           </div>
@@ -104,23 +109,32 @@ export default function HomePage() {
               <ArrowRight className="ml-1 h-4 w-4" />
             </Link>
           </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {upcomingEvents.map((event) => (
-              <EventCard key={event.id} event={event} />
-            ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {loading ? (
+              // Loading placeholders
+              Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="bg-white rounded-lg shadow-md p-4 animate-pulse">
+                  <div className="h-48 bg-gray-300 rounded-lg mb-4"></div>
+                  <div className="h-4 bg-gray-300 rounded mb-2"></div>
+                  <div className="h-3 bg-gray-300 rounded w-3/4"></div>
+                </div>
+              ))
+            ) : (
+              upcomingEvents.map((event) => (
+                <EventCard key={event.id} event={event} />
+              ))
+            )}
           </div>
           
           {upcomingEvents.length === 0 && (
             <div className="text-center py-12">
-              <p className="text-gray-500">No upcoming events scheduled.</p>
-              {user?.role === 'club-admin' && (
-                <Button 
-                  className="mt-4" 
-                  asChild
+              <p className="text-gray-500">No upcoming events scheduled.</p>              {user?.role === 'club-admin' && (
+                <Link 
+                  to="/admin/events/create"
+                  className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 h-10 py-2 px-4 bg-blue-600 text-white hover:bg-blue-700 mt-4"
                 >
-                  <Link to="/admin/events/create">Create an Event</Link>
-                </Button>
+                  Create an Event
+                </Link>
               )}
             </div>
           )}
@@ -140,11 +154,21 @@ export default function HomePage() {
               <ArrowRight className="ml-1 h-4 w-4" />
             </Link>
           </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {featuredClubs.map((club) => (
-              <ClubCard key={club.id} club={club} />
-            ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {loading ? (
+              // Loading placeholders
+              Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="bg-white rounded-lg shadow-md p-4 animate-pulse">
+                  <div className="h-32 bg-gray-300 rounded-lg mb-4"></div>
+                  <div className="h-4 bg-gray-300 rounded mb-2"></div>
+                  <div className="h-3 bg-gray-300 rounded w-2/3"></div>
+                </div>
+              ))
+            ) : (
+              featuredClubs.map((club) => (
+                <ClubCard key={club.id} club={club} />
+              ))
+            )}
           </div>
         </div>
       </section>
@@ -155,23 +179,19 @@ export default function HomePage() {
           <h2 className="text-2xl md:text-3xl font-bold mb-4">Ready to Get Involved?</h2>
           <p className="text-lg text-gray-300 max-w-2xl mx-auto mb-8">
             Whether you're looking to join a club, attend events, or showcase your talents, CUET ClubSphere has something for everyone.
-          </p>
-          <div className="flex flex-wrap justify-center gap-4">
-            <Button 
-              size="lg" 
-              className="bg-white text-gray-900 hover:bg-gray-100"
-              asChild
+          </p>          <div className="flex flex-wrap justify-center gap-4">
+            <Link 
+              to="/register"
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 h-12 px-6 text-base bg-white text-gray-900 hover:bg-gray-100"
             >
-              <Link to="/register">Create an Account</Link>
-            </Button>
-            <Button 
-              variant="outline" 
-              size="lg" 
-              className="border-white text-white hover:bg-white/10"
-              asChild
+              Create an Account
+            </Link>
+            <Link 
+              to="/clubs/register"
+              className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 h-12 px-6 text-base border border-white bg-transparent hover:bg-white/10 text-white"
             >
-              <Link to="/clubs/register">Register Your Club</Link>
-            </Button>
+              Register Your Club
+            </Link>
           </div>
         </div>
       </section>

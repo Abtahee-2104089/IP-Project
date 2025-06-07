@@ -2,11 +2,11 @@
   "name": "cuet-clubsphere",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+  "type": "module",  "scripts": {
+    "dev": "concurrently \"bun run dev:client\" \"bun run dev:server\"",
     "dev:client": "vite",
     "dev:server": "nodemon server/index.js",
+    "seed": "node server/seedData.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
