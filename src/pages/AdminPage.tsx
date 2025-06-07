@@ -7,15 +7,19 @@ import { Select } from '../components/ui/Select';
 import { Textarea } from '../components/ui/Textarea';
 import { Badge } from '../components/ui/Badge';
 import { useAuth } from '../context/AuthContext';
-import { events, getEventsByClub } from '../data/events';
-import { getClubById } from '../data/clubs';
 import { formatDate, formatTime } from '../lib/utils';
+import { eventsAPI } from '../services/api';
+import { useClubs, useEvents } from '../hooks/useData';
+import type { Club, Event } from '../types';
 
 export default function AdminPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { clubs, loading: clubsLoading } = useClubs();
+  const { events, loading: eventsLoading, refetch: refetchEvents } = useEvents();
   const [activeTab, setActiveTab] = useState<'events' | 'members' | 'announcements' | 'settings'>('events');
   const [view, setView] = useState<'list' | 'create'>('list');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -27,8 +31,7 @@ export default function AdminPage() {
     image: 'https://images.pexels.com/photos/3760454/pexels-photo-3760454.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     maxParticipants: ''
   });
-  
-  // Check if user is admin or club-admin
+    // Check if user is admin or club-admin
   if (!user || (user.role !== 'admin' && user.role !== 'club-admin')) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
@@ -42,33 +45,82 @@ export default function AdminPage() {
   }
   
   // Get club events if user is club-admin
-  const userClub = user.role === 'club-admin' ? 
-    getClubById(clubs => clubs.adminId === user.id) : null;
-  
-  const clubEvents = userClub ? 
-    getEventsByClub(userClub.id) : 
+  const userClub = user.role === 'club-admin' && clubs.length > 0 ? 
+    clubs.find((club: Club) => club.adminId === user.id) : null;
+    const clubEvents = userClub ? 
+    events.filter((event: Event) => event.clubId === userClub.id) : 
     user.role === 'admin' ? events : [];
   
+  // Show loading state
+  if (clubsLoading || eventsLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/3 mb-6"></div>
+          <div className="bg-gray-200 rounded-lg h-16 mb-6"></div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="bg-gray-200 rounded-lg h-24"></div>
+            ))}
+          </div>
+          <div className="bg-gray-200 rounded-lg h-96"></div>
+        </div>
+      </div>
+    );
+  }
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
-  
-  const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In a real app, we would save the event to the database
-    setFormData({
-      title: '',
-      description: '',
-      date: '',
-      startTime: '',
-      endTime: '',
-      location: '',
-      category: '',
-      image: 'https://images.pexels.com/photos/3760454/pexels-photo-3760454.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-      maxParticipants: ''
-    });
-    setView('list');
+    
+    if (!userClub) {
+      alert('Club not found. Unable to create event.');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      const eventData = {
+        title: formData.title,
+        description: formData.description,
+        date: formData.date,
+        startTime: formData.startTime,
+        endTime: formData.endTime,
+        location: formData.location,
+        category: formData.category,
+        image: formData.image,
+        maxParticipants: formData.maxParticipants ? parseInt(formData.maxParticipants) : undefined,
+        clubId: userClub.id
+      };
+      
+      await eventsAPI.create(eventData);
+      
+      // Reset form and go back to list
+      setFormData({
+        title: '',
+        description: '',
+        date: '',
+        startTime: '',
+        endTime: '',
+        location: '',
+        category: '',
+        image: 'https://images.pexels.com/photos/3760454/pexels-photo-3760454.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
+        maxParticipants: ''
+      });
+      setView('list');
+      
+      // Refresh events list
+      refetchEvents();
+    } catch (error) {
+      console.error('Error creating event:', error);
+      alert('Failed to create event. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   
   // Categories for dropdown
@@ -141,11 +193,10 @@ export default function AdminPage() {
           </div>
         </div>
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-center justify-between">            <div>
               <p className="text-sm text-gray-500">Upcoming Events</p>
               <h3 className="text-2xl font-bold">
-                {clubEvents.filter(e => e.status === 'upcoming').length}
+                {clubEvents.filter((e: Event) => e.status === 'upcoming').length}
               </h3>
             </div>
             <Clock className="h-8 w-8 text-purple-500" />
@@ -156,7 +207,7 @@ export default function AdminPage() {
             <div>
               <p className="text-sm text-gray-500">Total Registrations</p>
               <h3 className="text-2xl font-bold">
-                {clubEvents.reduce((acc, event) => acc + event.registeredUsers.length, 0)}
+                {clubEvents.reduce((acc: number, event: Event) => acc + (event.registeredUsers?.length || 0), 0)}
               </h3>
             </div>
             <BarChart className="h-8 w-8 text-amber-500" />
@@ -204,9 +255,8 @@ export default function AdminPage() {
                       Actions
                     </th>
                   </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {clubEvents.map((event) => (
+                </thead>                <tbody className="bg-white divide-y divide-gray-200">
+                  {clubEvents.map((event: Event) => (
                     <tr key={event.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
@@ -245,9 +295,8 @@ export default function AdminPage() {
                         }>
                           {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
                         </Badge>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {event.registeredUsers.length}
+                      </td>                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {event.registeredUsers?.length || 0}
                         {event.maxParticipants && ` / ${event.maxParticipants}`}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
@@ -358,13 +407,12 @@ export default function AdminPage() {
                     required
                   />
                 </div>
-                
-                <div className="flex justify-end space-x-4">
+                  <div className="flex justify-end space-x-4">
                   <Button type="button" variant="outline" onClick={() => setView('list')}>
                     Cancel
                   </Button>
-                  <Button type="submit">
-                    Create Event
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? 'Creating...' : 'Create Event'}
                   </Button>
                 </div>
               </form>

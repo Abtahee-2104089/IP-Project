@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { CalendarClock, MapPin, Users, ArrowLeft, Clock, Calendar } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -6,12 +6,11 @@ import { Badge } from '../components/ui/Badge';
 import { StarRating } from '../components/ui/StarRating';
 import { Avatar } from '../components/ui/Avatar';
 import FeedbackForm from '../components/FeedbackForm';
-import { getEventById } from '../data/events';
-import { getClubById } from '../data/clubs';
-import { getUsersByEvent, getUserById } from '../data/users';
 import { formatDate, formatTime } from '../lib/utils';
 import { useEvent } from '../context/EventContext';
 import { useAuth } from '../context/AuthContext';
+import { eventsAPI, clubsAPI, usersAPI } from '../services/api';
+import type { Event, Club, User } from '../types';
 
 export default function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -19,27 +18,99 @@ export default function EventDetailPage() {
   const { registerForEvent, unregisterFromEvent, isUserRegistered, hasUserSubmittedFeedback } = useEvent();
   const [isRegistering, setIsRegistering] = useState(false);
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+  const [event, setEvent] = useState<Event | null>(null);
+  const [club, setClub] = useState<Club | null>(null);  const [registeredUsers, setRegisteredUsers] = useState<User[]>([]);
+  const [feedbackUsers, setFeedbackUsers] = useState<{ [key: string]: User }>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  useEffect(() => {
+    const fetchEventData = async () => {
+      if (!id) return;
+      
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Fetch event details
+        const eventData = await eventsAPI.getById(id);
+        setEvent(eventData);
+        
+        // Fetch club details
+        if (eventData.clubId) {
+          const clubData = await clubsAPI.getById(eventData.clubId);
+          setClub(clubData);
+        }        // Fetch registered users
+        if (eventData.registeredUsers && eventData.registeredUsers.length > 0) {
+          const users = await Promise.all(
+            eventData.registeredUsers.map((userId: string) => usersAPI.getById(userId))
+          );
+          setRegisteredUsers(users.filter(Boolean));
+        }
+          // Fetch feedback users
+        if (eventData.feedback && eventData.feedback.length > 0) {
+          const feedbackUserMap: { [key: string]: User } = {};
+          await Promise.all(
+            eventData.feedback.map(async (feedback: any) => {
+              try {
+                const user = await usersAPI.getById(feedback.userId);
+                if (user) {
+                  feedbackUserMap[feedback.userId] = user;
+                }
+              } catch (err) {
+                console.error(`Error fetching user ${feedback.userId}:`, err);
+              }
+            })
+          );
+          setFeedbackUsers(feedbackUserMap);
+        }
+      } catch (err) {
+        setError('Failed to load event details');
+        console.error('Error fetching event data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchEventData();
+  }, [id]);
   
   if (!id) {
     return <div>Event not found</div>;
   }
   
-  const event = getEventById(id);
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
+          <div className="h-12 bg-gray-200 rounded w-1/2 mb-8"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2">
+              <div className="h-64 bg-gray-200 rounded-lg mb-6"></div>
+              <div className="h-48 bg-gray-200 rounded-lg"></div>
+            </div>
+            <div>
+              <div className="h-64 bg-gray-200 rounded-lg mb-6"></div>
+              <div className="h-48 bg-gray-200 rounded-lg"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   
-  if (!event) {
+  if (error || !event) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
         <h1 className="text-2xl font-bold text-gray-900 mb-4">Event Not Found</h1>
-        <p className="text-gray-600 mb-8">The event you're looking for doesn't exist or has been removed.</p>
-        <Button asChild>
+        <p className="text-gray-600 mb-8">{error || "The event you're looking for doesn't exist or has been removed."}</p>
+        <Button>
           <Link to="/events">Back to Events</Link>
         </Button>
       </div>
     );
   }
-  
-  const club = getClubById(event.clubId);
-  const registeredUsers = getUsersByEvent(event.id);
   const registered = isUserRegistered(event.id);
   const registrationFull = event.maxParticipants !== undefined && 
     event.registeredUsers.length >= event.maxParticipants;
@@ -70,9 +141,8 @@ export default function EventDetailPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-6">
-        <Button variant="ghost" asChild className="mb-4">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">      <div className="mb-6">
+        <Button variant="ghost" className="mb-4">
           <Link to="/events" className="flex items-center text-gray-600">
             <ArrowLeft size={16} className="mr-1" />
             Back to Events
@@ -159,14 +229,13 @@ export default function EventDetailPage() {
                 />
               </div>
             )}
-            
-            {/* Show feedback if available and not showing form */}
+              {/* Show feedback if available and not showing form */}
             {!showFeedbackForm && event.feedback && event.feedback.length > 0 && (
               <div className="mt-8">
                 <h3 className="text-lg font-semibold mb-4">Participant Feedback</h3>
                 <div className="space-y-4">
-                  {event.feedback.map((feedback) => {
-                    const feedbackUser = getUserById(feedback.userId);
+                  {event.feedback.map((feedback: any) => {
+                    const feedbackUser = feedbackUsers[feedback.userId];
                     return (
                       <div key={feedback.id} className="bg-gray-50 p-4 rounded-lg">
                         <div className="flex items-start gap-3">

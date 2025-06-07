@@ -1,14 +1,14 @@
-import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Clock, MapPin, Mail, Book, GraduationCap } from 'lucide-react';
+import { Calendar, Clock, Mail, Book, GraduationCap } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Avatar } from '../components/ui/Avatar';
 import EventCard from '../components/EventCard';
 import { useAuth } from '../context/AuthContext';
-import { events } from '../data/events';
+import { useEvents } from '../hooks/useData';
 
 export default function ProfilePage() {
   const { user, logout } = useAuth();
+  const { events, loading } = useEvents();
   const navigate = useNavigate();
   
   if (!user) {
@@ -24,12 +24,16 @@ export default function ProfilePage() {
   }
   
   // Get registered events
-  const registeredEvents = user.registeredEvents
+  const registeredEvents = user.registeredEvents && events.length > 0
     ? events.filter(event => user.registeredEvents?.includes(event.id))
     : [];
   
-  const upcomingEvents = registeredEvents.filter(event => event.status === 'upcoming');
-  const pastEvents = registeredEvents.filter(event => event.status === 'past');
+  const upcomingEvents = registeredEvents.filter(event => 
+    new Date(event.date) > new Date()
+  );
+  const pastEvents = registeredEvents.filter(event => 
+    new Date(event.date) <= new Date()
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -124,13 +128,18 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
-        
-        {/* Registered events */}
+          {/* Registered events */}
         <div className="lg:col-span-2 space-y-8">
           <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
             <h2 className="text-lg font-semibold mb-4">Upcoming Events</h2>
             
-            {upcomingEvents.length > 0 ? (
+            {loading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="animate-pulse bg-gray-200 h-48 rounded-lg"></div>
+                ))}
+              </div>
+            ) : upcomingEvents.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {upcomingEvents.map(event => (
                   <EventCard key={event.id} event={event} />
@@ -149,11 +158,16 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
-          
-          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
+            <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
             <h2 className="text-lg font-semibold mb-4">Past Events</h2>
             
-            {pastEvents.length > 0 ? (
+            {loading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className="animate-pulse bg-gray-200 h-48 rounded-lg"></div>
+                ))}
+              </div>
+            ) : pastEvents.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {pastEvents.map(event => (
                   <EventCard key={event.id} event={event} />

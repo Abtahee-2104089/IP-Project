@@ -1,40 +1,92 @@
-import React from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { CalendarDays, Users, Clock, ArrowLeft, Globe, Facebook, Twitter, Instagram } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Avatar } from '../components/ui/Avatar';
 import EventCard from '../components/EventCard';
-import { getClubById } from '../data/clubs';
-import { getEventsByClub } from '../data/events';
-import { getUserById } from '../data/users';
 import { formatDate } from '../lib/utils';
+import { clubsAPI, eventsAPI, usersAPI } from '../services/api';
+import type { Club, Event, User } from '../types';
 
 export default function ClubDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [club, setClub] = useState<Club | null>(null);
+  const [clubEvents, setClubEvents] = useState<Event[]>([]);
+  const [clubAdmin, setClubAdmin] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  useEffect(() => {
+    const fetchClubData = async () => {
+      if (!id) return;
+      
+      try {
+        setLoading(true);
+        setError(null);
+        
+        // Fetch club details
+        const clubData = await clubsAPI.getById(id);
+        setClub(clubData);
+        
+        // Fetch club events
+        const eventsData = await eventsAPI.getAll();
+        const clubEventsData = eventsData.filter((event: { clubId: string; }) => event.clubId === id);
+        setClubEvents(clubEventsData);
+        
+        // Fetch club admin
+        if (clubData.adminId) {
+          const adminData = await usersAPI.getById(clubData.adminId);
+          setClubAdmin(adminData);
+        }
+      } catch (err) {
+        setError('Failed to load club details');
+        console.error('Error fetching club data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchClubData();
+  }, [id]);
   
   if (!id) {
     return <div>Club not found</div>;
   }
   
-  const club = getClubById(id);
-  
-  if (!club) {
+  if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">Club Not Found</h1>
-        <p className="text-gray-600 mb-8">The club you're looking for doesn't exist or has been removed.</p>
-        <Button asChild>
-          <Link to="/clubs">Back to Clubs</Link>
-        </Button>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="animate-pulse">
+          <div className="h-64 bg-gray-200 rounded-lg mb-8"></div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-6">
+              <div className="h-48 bg-gray-200 rounded-lg"></div>
+              <div className="h-64 bg-gray-200 rounded-lg"></div>
+            </div>
+            <div className="space-y-6">
+              <div className="h-48 bg-gray-200 rounded-lg"></div>
+              <div className="h-32 bg-gray-200 rounded-lg"></div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
   
-  const clubEvents = getEventsByClub(club.id);
-  const upcomingEvents = clubEvents.filter(event => event.status === 'upcoming');
-  const pastEvents = clubEvents.filter(event => event.status === 'past');
-  const clubAdmin = getUserById(club.adminId);
+  if (error || !club) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">Club Not Found</h1>
+        <p className="text-gray-600 mb-8">{error || "The club you're looking for doesn't exist or has been removed."}</p>
+        <Button>
+          <Link to="/clubs">Back to Clubs</Link>
+        </Button>      </div>
+    );
+  }
+  
+  const upcomingEvents = clubEvents.filter((event: Event) => event.status === 'upcoming');
+  const pastEvents = clubEvents.filter((event: Event) => event.status === 'past');
 
   return (
     <div>
@@ -76,8 +128,7 @@ export default function ClubDetailPage() {
         </div>
       </div>
       
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Button variant="ghost" asChild className="mb-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">        <Button variant="ghost" className="mb-8">
           <Link to="/clubs" className="flex items-center text-gray-600">
             <ArrowLeft size={16} className="mr-1" />
             Back to Clubs
@@ -144,10 +195,9 @@ export default function ClubDetailPage() {
                     <EventCard key={event.id} event={event} />
                   ))}
                 </div>
-                
-                {pastEvents.length > 4 && (
+                  {pastEvents.length > 4 && (
                   <div className="text-center mt-4">
-                    <Button variant="outline" asChild>
+                    <Button variant="outline">
                       <Link to={`/clubs/${club.id}/events`}>View all past events</Link>
                     </Button>
                   </div>

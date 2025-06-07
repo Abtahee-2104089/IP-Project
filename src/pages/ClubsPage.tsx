@@ -1,11 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Search } from 'lucide-react';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
 import ClubCard from '../components/ClubCard';
-import { clubs } from '../data/clubs';
+import { useClubs } from '../hooks/useData';
 
 export default function ClubsPage() {
+  const { clubs, loading, error } = useClubs();
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   
@@ -33,10 +34,15 @@ export default function ClubsPage() {
       return true;
     });
   }, [clubs, searchQuery, categoryFilter]);
-
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Clubs & Organizations</h1>
+      
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
+          <p className="text-red-800">{error}</p>
+        </div>
+      )}
       
       {/* Filter and search section */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-8 p-4">
@@ -50,6 +56,7 @@ export default function ClubsPage() {
               className="pl-10"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              disabled={loading}
             />
           </div>
           
@@ -61,30 +68,52 @@ export default function ClubsPage() {
             ]}
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
+            disabled={loading}
           />
         </div>
       </div>
       
-      {/* Clubs grid */}
-      {filteredClubs.length > 0 ? (
+      {/* Loading state */}
+      {loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredClubs.map(club => (
-            <ClubCard key={club.id} club={club} />
+          {Array.from({ length: 8 }).map((_, index) => (
+            <div key={index} className="bg-white rounded-lg shadow-md p-4 animate-pulse">
+              <div className="h-32 bg-gray-300 rounded-lg mb-4"></div>
+              <div className="h-4 bg-gray-300 rounded mb-2"></div>
+              <div className="h-3 bg-gray-300 rounded w-2/3"></div>
+            </div>
           ))}
         </div>
-      ) : (
-        <div className="text-center py-12">
-          <p className="text-gray-500">No clubs found matching your criteria.</p>
-          <button
-            onClick={() => {
-              setSearchQuery('');
-              setCategoryFilter('');
-            }}
-            className="mt-4 text-blue-600 hover:text-blue-700"
-          >
-            Clear filters
-          </button>
-        </div>
+      )}
+      
+      {/* Clubs grid */}
+      {!loading && (
+        <>
+          {filteredClubs.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {filteredClubs.map(club => (
+                <ClubCard key={club.id} club={club} />
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-gray-500">
+                {clubs.length === 0 ? 'No clubs available.' : 'No clubs found matching your criteria.'}
+              </p>
+              {clubs.length > 0 && (
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCategoryFilter('');
+                  }}
+                  className="mt-4 text-blue-600 hover:text-blue-700"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
